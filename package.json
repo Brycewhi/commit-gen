@@ -1,0 +1,75 @@
+{
+  "name": "commit-gen",
+  "displayName": "Commit Gen",
+  "description": "AI-powered git commit message generator",
+  "publisher": "brycewhiteside",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Other"],
+  "activationEvents": ["onCommand:commit-gen.generate"],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "commit-gen.generate",
+        "title": "Generate Commit Message",
+        "icon": "$(sparkle)"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "commit-gen.generate",
+          "group": "navigation",
+          "when": "scmProvider == git"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Commit Gen",
+      "properties": {
+        "commitGen.backend": {
+          "type": "string",
+          "default": "openai",
+          "enum": ["openai", "fallback"],
+          "description": "Which backend to use for generating commit messages"
+        },
+        "commitGen.style": {
+          "type": "string",
+          "default": "conventional",
+          "enum": ["conventional", "emoji", "detailed"],
+          "description": "Style of commit message to generate"
+        },
+        "commitGen.maxLength": {
+          "type": "number",
+          "default": 72,
+          "description": "Maximum length of the commit message subject line"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "build": "node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "package": "vsce package",
+    "compile": "tsc --noEmit"
+  },
+  "dependencies": {
+    "node-cache": "^5.1.2",
+    "openai": "^4.20.0",
+    "parse-diff": "^0.11.0",
+    "simple-git": "^3.20.0",
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^18.0.0",
+    "@types/vscode": "^1.80.0",
+    "@vscode/vsce": "^2.22.0",
+    "esbuild": "^0.19.0",
+    "eslint": "^8.0.0",
+    "prettier": "^3.0.0",
+    "typescript": "^5.0.0"
+  }
+}
