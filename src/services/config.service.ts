@@ -16,7 +16,28 @@ export class ConfigService {
     await this.secrets.store(`commitGen.${provider}.apiKey`, key);
   }
 
-  async promptForApiKey(): Promise<string | undefined> {
+  async promptForApiKey(provider: 'claude' | 'openai' = 'claude'): Promise<string | undefined> {
+    if (provider === 'claude') {
+      const key = await vscode.window.showInputBox({
+        title: 'Anthropic API Key',
+        prompt: 'Enter your Anthropic API key (starts with sk-ant-)',
+        password: true,
+        placeHolder: 'sk-ant-...',
+        validateInput: (value) => {
+          if (!value.startsWith('sk-ant-')) {
+            return 'Key must start with "sk-ant-"';
+          }
+          return undefined;
+        },
+      });
+
+      if (key) {
+        await this.setApiKey('claude', key);
+      }
+
+      return key;
+    }
+
     const key = await vscode.window.showInputBox({
       title: 'OpenAI API Key',
       prompt: 'Enter your OpenAI API key (starts with sk-)',

@@ -7,14 +7,18 @@
   "engines": {
     "vscode": "^1.80.0"
   },
-  "categories": ["Other"],
-  "activationEvents": ["onCommand:commit-gen.generate"],
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "commit-gen.generate",
-        "title": "Generate Commit Message",
+        "title": "Commit Gen: Generate Message",
         "icon": "$(sparkle)"
       }
     ],
@@ -22,8 +26,7 @@
       "scm/title": [
         {
           "command": "commit-gen.generate",
-          "group": "navigation",
-          "when": "scmProvider == git"
+          "group": "navigation"
         }
       ]
     },
@@ -32,14 +35,22 @@
       "properties": {
         "commitGen.backend": {
           "type": "string",
-          "default": "openai",
-          "enum": ["openai", "fallback"],
+          "default": "claude",
+          "enum": [
+            "claude",
+            "openai",
+            "fallback"
+          ],
           "description": "Which backend to use for generating commit messages"
         },
         "commitGen.style": {
           "type": "string",
           "default": "conventional",
-          "enum": ["conventional", "emoji", "detailed"],
+          "enum": [
+            "conventional",
+            "emoji",
+            "detailed"
+          ],
           "description": "Style of commit message to generate"
         },
         "commitGen.maxLength": {
@@ -57,6 +68,7 @@
     "compile": "tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.96.0",
     "node-cache": "^5.1.2",
     "openai": "^4.20.0",
     "parse-diff": "^0.11.0",

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { GitService } from '../services/git.service';
 import { ConfigService } from '../services/config.service';
 import { CacheService } from '../services/cache.service';
+import { ClaudeBackend } from '../backends/claude.backend';
 import { OpenAIBackend } from '../backends/openai.backend';
 import { FallbackBackend } from '../backends/fallback.backend';
 
@@ -58,12 +59,11 @@ export class GenerateCommand {
     if (backend === 'fallback') {
       const fb = new FallbackBackend();
       message = await fb.generate(diffSummary.diff, style);
-    } else {
-      // openai path — needs a key
+    } else if (backend === 'openai') {
       let apiKey = await this.configService.getApiKey('openai');
 
       if (!apiKey) {
-        apiKey = await this.configService.promptForApiKey();
+        apiKey = await this.configService.promptForApiKey('openai');
       }
 
       if (!apiKey) {
@@ -75,6 +75,23 @@ export class GenerateCommand {
 
       const openai = new OpenAIBackend(apiKey);
       message = await openai.generate(diffSummary.diff, style);
+    } else {
+      // claude path (default) — needs a key
+      let apiKey = await this.configService.getApiKey('claude');
+
+      if (!apiKey) {
+        apiKey = await this.configService.promptForApiKey('claude');
+      }
+
+      if (!apiKey) {
+        vscode.window.showErrorMessage(
+          'Commit Gen: No API key provided. Run the command again and enter your Anthropic key when prompted, or switch to the "fallback" backend in settings.',
+        );
+        return;
+      }
+
+      const claude = new ClaudeBackend(apiKey);
+      message = await claude.generate(diffSummary.diff, style);
     }
 
     // Step 4: cache + populate input box
