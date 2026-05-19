@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import simpleGit from 'simple-git';
 import parseDiff from 'parse-diff';
 import { DiffSummary } from '../types';
+import { MAX_DIFF_CHARS } from '../constants';
 
-// Files that add noise without helping the AI understand intent
 const NOISE_PATTERNS = [
   'package-lock.json',
   'yarn.lock',
@@ -14,9 +14,17 @@ const NOISE_PATTERNS = [
   'dist/',
 ];
 
-const MAX_DIFF_CHARS = 10_000;
-
+/**
+ * Service for interacting with git repositories.
+ * Retrieves and optimizes staged diffs for AI processing.
+ */
 export class GitService {
+  /**
+   * Gets the staged diff from the current workspace.
+   * Filters noise files and truncates large diffs.
+   * @returns DiffSummary with optimized diff, or null if no staged changes
+   * @throws Error if workspace is not a git repository
+   */
   async getStagedDiff(): Promise<DiffSummary | null> {
     const workspaceRoot = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
     if (!workspaceRoot) {
@@ -25,6 +33,11 @@ export class GitService {
 
     const git = simpleGit(workspaceRoot);
 
+    const isRepo = await git.checkIsRepo();
+    if (!isRepo) {
+      throw new Error('Not a git repository. Initialize with: git init');
+    }
+
     const rawDiff = await git.diff(['--cached']);
     if (!rawDiff.trim()) {
       return null;
@@ -32,7 +45,6 @@ export class GitService {
 
     const optimized = this.optimizeDiff(rawDiff);
 
-    // parse-diff gives us structured file/hunk data so we can count accurately
     const files = parseDiff(rawDiff);
     let additions = 0;
     let deletions = 0;
@@ -54,7 +66,6 @@ export class GitService {
   }
 
   private optimizeDiff(raw: string): string {
-    // Split into per-file sections (each starts with "diff --git")
     const sections = raw.split(/^(?=diff --git)/m);
 
     const kept = sections.filter((section) => {
@@ -64,7 +75,6 @@ export class GitService {
     let result = kept.join('');
 
     if (result.length > MAX_DIFF_CHARS) {
-      // Keep as many complete lines as we can under the limit, then append a notice
       const lines = result.split('\n');
       const truncated: string[] = [];
       let total = 0;

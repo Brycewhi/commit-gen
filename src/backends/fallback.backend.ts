@@ -1,11 +1,24 @@
 import { Backend } from '../types';
 
-// Heuristic-based backend — never fails, no API key required
+/**
+ * Heuristic-based fallback backend.
+ * Generates basic commit messages without any API calls.
+ * Always available, never fails.
+ */
 export class FallbackBackend implements Backend {
+  /**
+   * Always returns true since no external dependencies are required.
+   */
   async isAvailable(): Promise<boolean> {
     return true;
   }
 
+  /**
+   * Generates a commit message using simple heuristics.
+   * @param diff - The git diff to analyze
+   * @param style - The commit message style (conventional, emoji, detailed)
+   * @returns A basic commit message based on diff patterns
+   */
   async generate(diff: string, style: string): Promise<string> {
     const type = this.detectType(diff);
     const fileCount = this.countFiles(diff);
@@ -31,7 +44,6 @@ export class FallbackBackend implements Backend {
     if (diff.includes('package.json')) return 'chore';
     if (/test|spec/i.test(diff)) return 'test';
     if (/README|\.md/i.test(diff)) return 'docs';
-    // "new file mode" appears in git diff output when a file is first added
     if (diff.includes('new file mode')) return 'feat';
     return 'refactor';
   }

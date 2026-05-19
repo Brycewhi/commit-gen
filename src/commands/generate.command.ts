@@ -6,8 +6,15 @@ import { ClaudeBackend } from '../backends/claude.backend';
 import { OpenAIBackend } from '../backends/openai.backend';
 import { OllamaBackend } from '../backends/ollama.backend';
 import { FallbackBackend } from '../backends/fallback.backend';
+import { ERROR_MESSAGES, STATUS_MESSAGES } from '../constants';
 
+/**
+ * Command handler for generating commit messages.
+ * Coordinates between git, cache, and AI backends.
+ */
 export class GenerateCommand {
+  private isGenerating = false;
+
   constructor(
     private readonly context: vscode.ExtensionContext,
     private readonly gitService: GitService,
@@ -15,99 +22,111 @@ export class GenerateCommand {
     private readonly cacheService: CacheService,
   ) {}
 
+  /**
+   * Executes the generate command with progress indication.
+   * Prevents double-clicks by tracking generation state.
+   */
   async execute(): Promise<void> {
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: 'Generating commit message...',
-        cancellable: false,
-      },
-      async () => {
-        try {
-          await this.run();
-        } catch (err: unknown) {
-          const message = err instanceof Error ? err.message : String(err);
-          vscode.window.showErrorMessage(`Commit Gen: ${message}`);
-        }
-      },
-    );
+    if (this.isGenerating) {
+      return;
+    }
+
+    this.isGenerating = true;
+
+    try {
+      await vscode.window.withProgress(
+        {
+          location: vscode.ProgressLocation.Notification,
+          title: STATUS_MESSAGES.GENERATING,
+          cancellable: false,
+        },
+        async () => {
+          try {
+            await this.run();
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            vscode.window.showErrorMessage(`Commit Gen: ${message}`);
+          }
+        },
+      );
+    } finally {
+      this.isGenerating = false;
+    }
   }
 
   private async run(): Promise<void> {
-    // Step 1: get staged diff
     const diffSummary = await this.gitService.getStagedDiff();
     if (!diffSummary) {
-      vscode.window.showWarningMessage(
-        'No staged changes found. Stage your changes first.',
-      );
+      vscode.window.showWarningMessage(ERROR_MESSAGES.NO_STAGED_CHANGES);
       return;
     }
 
     const style = this.configService.getStyle();
     const backend = this.configService.getBackend();
 
-    // Step 2: check cache
     const cached = this.cacheService.get(diffSummary.diff, style);
     if (cached) {
       this.setInputBoxValue(cached);
-      vscode.window.setStatusBarMessage('✨ Commit message generated! (cached)', 3000);
+      vscode.window.setStatusBarMessage(STATUS_MESSAGES.CACHED, 3000);
       return;
     }
 
-    // Step 3: generate
-    let message: string;
-
-    if (backend === 'fallback') {
-      const fb = new FallbackBackend();
-      message = await fb.generate(diffSummary.diff, style);
-    } else if (backend === 'ollama') {
-      const ollama = new OllamaBackend();
-      message = await ollama.generate(diffSummary.diff, style);
-    } else if (backend === 'openai') {
-      let apiKey = await this.configService.getApiKey('openai');
-
-      if (!apiKey) {
-        apiKey = await this.configService.promptForApiKey('openai');
-      }
-
-      if (!apiKey) {
-        vscode.window.showErrorMessage(
-          'Commit Gen: No API key provided. Run the command again and enter your OpenAI key when prompted, or switch to the "fallback" backend in settings.',
-        );
-        return;
-      }
-
-      const openai = new OpenAIBackend(apiKey);
-      message = await openai.generate(diffSummary.diff, style);
-    } else {
-      // claude path (default) — needs a key
-      let apiKey = await this.configService.getApiKey('claude');
-
-      if (!apiKey) {
-        apiKey = await this.configService.promptForApiKey('claude');
-      }
-
-      if (!apiKey) {
-        vscode.window.showErrorMessage(
-          'Commit Gen: No API key provided. Run the command again and enter your Anthropic key when prompted, or switch to the "fallback" backend in settings.',
-        );
-        return;
-      }
-
-      const claude = new ClaudeBackend(apiKey);
-      message = await claude.generate(diffSummary.diff, style);
+    const message = await this.generateMessage(backend, diffSummary.diff, style);
+    if (!message) {
+      return;
     }
 
-    // Step 4: cache + populate input box
     this.cacheService.set(diffSummary.diff, style, message);
     this.setInputBoxValue(message);
-    vscode.window.setStatusBarMessage('✨ Commit message generated!', 3000);
+    vscode.window.setStatusBarMessage(STATUS_MESSAGES.GENERATED, 3000);
+  }
+
+  private async generateMessage(
+    backend: string,
+    diff: string,
+    style: string,
+  ): Promise<string | null> {
+    if (backend === 'fallback') {
+      const fb = new FallbackBackend();
+      return fb.generate(diff, style);
+    }
+
+    if (backend === 'ollama') {
+      const ollama = new OllamaBackend();
+      return ollama.generate(diff, style);
+    }
+
+    if (backend === 'openai') {
+      const apiKey = await this.getOrPromptApiKey('openai');
+      if (!apiKey) return null;
+
+      const openai = new OpenAIBackend(apiKey);
+      return openai.generate(diff, style);
+    }
+
+    const apiKey = await this.getOrPromptApiKey('claude');
+    if (!apiKey) return null;
+
+    const claude = new ClaudeBackend(apiKey);
+    return claude.generate(diff, style);
+  }
+
+  private async getOrPromptApiKey(provider: 'openai' | 'claude'): Promise<string | null> {
+    let apiKey = await this.configService.getApiKey(provider);
+
+    if (!apiKey) {
+      apiKey = await this.configService.promptForApiKey(provider);
+    }
+
+    if (!apiKey) {
+      vscode.window.showErrorMessage(ERROR_MESSAGES.NO_API_KEY(provider));
+      return null;
+    }
+
+    return apiKey;
   }
 
   private setInputBoxValue(message: string): void {
-    // The built-in Git extension exposes its API through its activation exports.
-    // We access it here rather than at activation time so we always get the
-    // freshest repository list (repos can be added/removed at runtime).
     const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports as
       | { getAPI(version: 1): { repositories: Array<{ inputBox: { value: string } }> } }
       | undefined;
@@ -118,10 +137,9 @@ export class GenerateCommand {
     if (repo) {
       repo.inputBox.value = message;
     } else {
-      // Fallback: copy to clipboard so the message is never lost
       vscode.env.clipboard.writeText(message);
       vscode.window.showInformationMessage(
-        `Commit Gen: Could not find git repo input box. Message copied to clipboard.\n\n${message}`,
+        `Commit Gen: Could not find git repo input box. Message copied to clipboard.`,
       );
     }
   }

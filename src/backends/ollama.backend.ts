@@ -1,66 +1,61 @@
 import { Ollama } from 'ollama';
 import { Backend } from '../types';
+import {
+  OLLAMA_HOST,
+  OLLAMA_DEFAULT_MODEL,
+  SYSTEM_PROMPTS,
+  ERROR_MESSAGES,
+  API_TIMEOUT_MS,
+} from '../constants';
 
-const SYSTEM_PROMPTS: Record<string, string> = {
-  conventional: `You are an expert at writing git commit messages.
-Generate a single conventional commit message for the following diff.
-Format: <type>(<scope>): <description>
-Types: feat, fix, docs, style, refactor, perf, test, chore
-Rules: lowercase only, imperative mood, max 72 chars, no period at end.
-Respond with ONLY the commit message, nothing else.`,
-
-  emoji: `Generate a single git commit message with an emoji prefix.
-Format: <emoji> <description>
-Example: ✨ add user authentication feature
-Rules: max 72 chars, imperative mood, one relevant emoji.
-Respond with ONLY the commit message, nothing else.`,
-
-  detailed: `Generate a git commit message with a subject and body.
-Format:
-<type>: <subject>
-
-<body explaining what and why, 2-3 sentences>
-
-Rules: subject max 72 chars, body wrapped at 72 chars.
-Respond with ONLY the commit message, nothing else.`,
-};
-
-const DEFAULT_MODEL = 'llama3';
-const OLLAMA_HOST = 'http://localhost:11434';
-
+/**
+ * Backend for generating commit messages using local Ollama instance.
+ * Provides free, private generation without API keys.
+ */
 export class OllamaBackend implements Backend {
   private readonly client: Ollama;
   private readonly model: string;
 
-  constructor(model: string = DEFAULT_MODEL) {
+  constructor(model: string = OLLAMA_DEFAULT_MODEL) {
     this.client = new Ollama({ host: OLLAMA_HOST });
     this.model = model;
   }
 
+  /**
+   * Checks if Ollama server is running and accessible.
+   */
   async isAvailable(): Promise<boolean> {
     try {
-      const response = await fetch(OLLAMA_HOST);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+      const response = await fetch(OLLAMA_HOST, { signal: controller.signal });
+      clearTimeout(timeoutId);
       return response.ok;
     } catch {
       return false;
     }
   }
 
+  /**
+   * Generates a commit message from the provided diff.
+   * @param diff - The git diff to analyze
+   * @param style - The commit message style (conventional, emoji, detailed)
+   * @returns The generated commit message
+   * @throws Error if Ollama is not running or the model is not found
+   */
   async generate(diff: string, style: string): Promise<string> {
     const systemPrompt = SYSTEM_PROMPTS[style] ?? SYSTEM_PROMPTS['conventional'];
 
     const available = await this.isAvailable();
     if (!available) {
-      throw new Error(
-        'Ollama is not running. To use Ollama:\n' +
-        '1. Install Ollama from https://ollama.ai\n' +
-        '2. Run: ollama run llama3\n' +
-        '3. Try generating again'
-      );
+      throw new Error(ERROR_MESSAGES.OLLAMA_NOT_RUNNING);
     }
 
     let response;
     try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), API_TIMEOUT_MS);
+
       response = await this.client.chat({
         model: this.model,
         messages: [
@@ -68,12 +63,15 @@ export class OllamaBackend implements Backend {
           { role: 'user', content: `Diff:\n${diff}` },
         ],
       });
+
+      clearTimeout(timeoutId);
     } catch (err: unknown) {
       if (err instanceof Error) {
+        if (err.name === 'AbortError') {
+          throw new Error(ERROR_MESSAGES.TIMEOUT);
+        }
         if (err.message.includes('model') && err.message.includes('not found')) {
-          throw new Error(
-            `Model "${this.model}" not found. Run: ollama pull ${this.model}`
-          );
+          throw new Error(ERROR_MESSAGES.OLLAMA_MODEL_NOT_FOUND(this.model));
         }
         throw new Error(`Ollama error: ${err.message}`);
       }
@@ -82,7 +80,7 @@ export class OllamaBackend implements Backend {
 
     const message = response.message?.content?.trim();
     if (!message) {
-      throw new Error('Ollama returned an empty response.');
+      throw new Error(ERROR_MESSAGES.OLLAMA_EMPTY_RESPONSE);
     }
     return message;
   }

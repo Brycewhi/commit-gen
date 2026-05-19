@@ -1,6 +1,9 @@
 import * as vscode from 'vscode';
 
-// SecretStorage keeps API keys out of settings.json (which is often committed)
+/**
+ * Service for managing extension configuration and API keys.
+ * Uses VS Code SecretStorage to keep API keys secure.
+ */
 export class ConfigService {
   private readonly secrets: vscode.SecretStorage;
 
@@ -8,14 +11,30 @@ export class ConfigService {
     this.secrets = context.secrets;
   }
 
+  /**
+   * Retrieves the API key for a provider from secure storage.
+   * @param provider - The AI provider name (claude, openai)
+   * @returns The stored API key, or undefined if not set
+   */
   async getApiKey(provider: string): Promise<string | undefined> {
     return this.secrets.get(`commitGen.${provider}.apiKey`);
   }
 
+  /**
+   * Stores an API key in secure storage.
+   * @param provider - The AI provider name
+   * @param key - The API key to store
+   */
   async setApiKey(provider: string, key: string): Promise<void> {
     await this.secrets.store(`commitGen.${provider}.apiKey`, key);
   }
 
+  /**
+   * Prompts the user to enter an API key via input box.
+   * Validates the key format before storing.
+   * @param provider - The AI provider (claude or openai)
+   * @returns The entered key, or undefined if cancelled
+   */
   async promptForApiKey(provider: 'claude' | 'openai' = 'claude'): Promise<string | undefined> {
     if (provider === 'claude') {
       const key = await vscode.window.showInputBox({
@@ -58,21 +77,33 @@ export class ConfigService {
     return key;
   }
 
+  /**
+   * Gets the configured commit message style.
+   * @returns The style (conventional, emoji, or detailed)
+   */
   getStyle(): string {
     return vscode.workspace
       .getConfiguration('commitGen')
       .get<string>('style', 'conventional');
   }
 
+  /**
+   * Gets the configured maximum commit message length.
+   * @returns The max length in characters
+   */
   getMaxLength(): number {
     return vscode.workspace
       .getConfiguration('commitGen')
       .get<number>('maxLength', 72);
   }
 
+  /**
+   * Gets the configured AI backend.
+   * @returns The backend name (claude, openai, ollama, fallback)
+   */
   getBackend(): string {
     return vscode.workspace
       .getConfiguration('commitGen')
-      .get<string>('backend', 'openai');
+      .get<string>('backend', 'claude');
   }
 }
