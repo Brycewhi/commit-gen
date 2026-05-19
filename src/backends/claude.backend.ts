@@ -42,7 +42,7 @@ export class ClaudeBackend implements Backend {
     let response;
     try {
       response = await this.client.messages.create({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         max_tokens: 150,
         system: systemPrompt,
         messages: [

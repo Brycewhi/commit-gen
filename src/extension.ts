@@ -4,26 +4,32 @@ import { ConfigService } from './services/config.service';
 import { CacheService } from './services/cache.service';
 import { GenerateCommand } from './commands/generate.command';
 
+console.log('[commit-gen] module loaded');
+
 export function activate(context: vscode.ExtensionContext): void {
-  const configService = new ConfigService(context);
-  const gitService = new GitService();
-  const cacheService = new CacheService();
-  const generateCommand = new GenerateCommand(
-    context,
-    gitService,
-    configService,
-    cacheService,
-  );
+  console.log('[commit-gen] activate() called');
+  try {
+    const configService = new ConfigService(context);
+    const gitService = new GitService();
+    const cacheService = new CacheService();
+    const generateCommand = new GenerateCommand(
+      context,
+      gitService,
+      configService,
+      cacheService,
+    );
 
-  // registerCommand returns a Disposable — pushing it to subscriptions ensures
-  // VS Code cleans it up when the extension is deactivated or the window closes
-  const disposable = vscode.commands.registerCommand(
-    'commit-gen.generate',
-    () => generateCommand.execute(),
-  );
+    const disposable = vscode.commands.registerCommand(
+      'commit-gen.generate',
+      () => generateCommand.execute(),
+    );
 
-  context.subscriptions.push(disposable);
-  console.log('Commit Gen activated');
+    context.subscriptions.push(disposable);
+    console.log('[commit-gen] command registered successfully');
+  } catch (err) {
+    console.error('[commit-gen] activation failed:', err);
+    throw err;
+  }
 }
 
 export function deactivate(): void {
