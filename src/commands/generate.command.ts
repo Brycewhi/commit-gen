@@ -4,6 +4,7 @@ import { ConfigService } from '../services/config.service';
 import { CacheService } from '../services/cache.service';
 import { ClaudeBackend } from '../backends/claude.backend';
 import { OpenAIBackend } from '../backends/openai.backend';
+import { OllamaBackend } from '../backends/ollama.backend';
 import { FallbackBackend } from '../backends/fallback.backend';
 
 export class GenerateCommand {
@@ -59,6 +60,9 @@ export class GenerateCommand {
     if (backend === 'fallback') {
       const fb = new FallbackBackend();
       message = await fb.generate(diffSummary.diff, style);
+    } else if (backend === 'ollama') {
+      const ollama = new OllamaBackend();
+      message = await ollama.generate(diffSummary.diff, style);
     } else if (backend === 'openai') {
       let apiKey = await this.configService.getApiKey('openai');
 
