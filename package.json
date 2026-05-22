@@ -10,16 +10,13 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [
-    "onStartupFinished"
-  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "commit-gen.generate",
         "title": "Commit Gen: Generate Message",
-        "icon": "$(sparkle)"
+        "icon": "$(robot)"
       }
     ],
     "menus": {
